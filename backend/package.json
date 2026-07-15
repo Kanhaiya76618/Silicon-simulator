@@ -1,0 +1,6 @@
+{
+  "name": "@silicon-canvas/backend",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": { "dev": "node src/server.mjs", "check": "node --check src/server.mjs" }
+}

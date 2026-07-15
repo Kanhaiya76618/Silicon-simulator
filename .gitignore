@@ -1,0 +1,19 @@
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# JavaScript build output
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+
+# Generated simulator artifacts
+artifacts/
+*.vcd
+*.wasm
+*.verilator
+

@@ -1,0 +1,6 @@
+{
+  "name": "@silicon-canvas/frontend",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": { "dev": "node server.mjs", "check": "node --check server.mjs" }
+}
