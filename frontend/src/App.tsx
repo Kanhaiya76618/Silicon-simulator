@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CircuitScene } from './components/CircuitScene';
+import { RTLGateScene } from './components/RTLGateScene';
 
 const files = ['cpu_top.v', 'fetch.v', 'decode.v', 'execute.v', 'memory.v', 'writeback.v', 'hazard_unit.v'];
 const code = `module cpu_top(
@@ -24,6 +25,7 @@ export default function App() {
   const [status, setStatus] = useState<'Ready' | 'Running' | 'Issue detected'>('Ready');
   const [autoFix, setAutoFix] = useState(false);
   const [selectedFile, setSelectedFile] = useState(files[0]);
+  const [activeTab, setActiveTab] = useState<'workspace' | 'architecture' | 'simulate' | 'gates' | 'export'>('workspace');
 
   function runSimulation() {
     setStatus('Running');
@@ -39,16 +41,46 @@ export default function App() {
     </header>
 
     <main>
-      <section className="hero"><p className="eyebrow">INTERACTIVE HDL WORKSPACE</p><h1>Explore hardware beyond the waveform.</h1><p>Write Verilog, run a browser simulation, then inspect every signal as a live 3D pipeline.</p><div className="badges"><span>Verilog</span><span>VCD</span><span>WebAssembly</span><span>3D View</span></div></section>
+      <section className="hero"><p className="eyebrow">PROMPT → RTL → PROOF</p><h1>From plain English to live silicon.</h1><p>Generate synthesizable hardware, inspect the RTL architecture, simulate in the browser, and resolve timing hazards with an agentic debug loop.</p><div className="badges"><span>Verilog</span><span>Testbench</span><span>VCD</span><span>WebAssembly</span><span>FPGA-ready</span></div></section>
+      <nav className="product-tabs" aria-label="Design workspace tabs">
+        <Tab label="Design workspace" active={activeTab === 'workspace'} onClick={() => setActiveTab('workspace')} />
+        <Tab label="Architecture" active={activeTab === 'architecture'} onClick={() => setActiveTab('architecture')} />
+        <Tab label="Simulation" active={activeTab === 'simulate'} onClick={() => setActiveTab('simulate')} />
+        <Tab label="3D RTL gates" active={activeTab === 'gates'} onClick={() => setActiveTab('gates')} />
+        <Tab label="FPGA export" active={activeTab === 'export'} onClick={() => setActiveTab('export')} />
+      </nav>
+      {activeTab === 'workspace' && <>
       <section className="workspace">
         <aside className="files glass panel"><div className="panel-title">▱ Project files <button>＋</button></div>{files.map((file) => <button className={`file ${selectedFile === file ? 'active' : ''}`} key={file} onClick={() => setSelectedFile(file)}><span>◈</span>{file}<small>{file === 'cpu_top.v' ? '4.2 KB' : '2.1 KB'}</small></button>)}<button className="add-file">＋ Add file</button></aside>
         <section className="editor panel"><div className="editor-bar"><span><b>Verilog</b> {selectedFile}</span><span>16 lines · Format</span></div><div className="code">{code.split('\n').map((line, i) => <div className={i === 13 ? 'warn-line' : ''} key={i}><em>{String(i + 1).padStart(2, '0')}</em><code>{line}</code></div>)}</div></section>
         <section className="scene-panel glass panel"><CircuitScene /></section>
       </section>
       <Waveform />
+      </>}
+      {activeTab === 'architecture' && <Architecture onOpen3D={() => setActiveTab('gates')} />}
+      {activeTab === 'simulate' && <Simulation onAutoFix={() => setAutoFix(true)} onRun={runSimulation} status={status} />}
+      {activeTab === 'gates' && <RTLGateScene />}
+      {activeTab === 'export' && <ExportPanel />}
     </main>
     {autoFix && <AutoFix onClose={() => setAutoFix(false)} onApply={() => { setStatus('Ready'); setAutoFix(false); }} />}
   </div>;
+}
+
+function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return <button className={active ? 'tab active-tab' : 'tab'} onClick={onClick} aria-selected={active}>{label}</button>;
+}
+
+function Architecture({ onOpen3D }: { onOpen3D: () => void }) {
+  const blocks = [['Fetch', 'Program counter · instruction memory'], ['Decode', 'Register file · control decode'], ['Execute', 'ALU · branch unit · forwarding'], ['Memory', 'Load/store interface'], ['Writeback', 'Result mux · register commit']];
+  return <section className="feature-view architecture-view"><div className="feature-top"><div><p className="eyebrow">INTERACTIVE VISUAL RTL ARCHITECTURE</p><h2>Trace every block across RTL and waveform.</h2><p>Select a block to reveal its source module, signal group, and current cycle state.</p></div><button className="autofix" onClick={onOpen3D}>Open 3D RTL gates →</button></div><div className="architecture-canvas glass"><div className="arch-flow">{blocks.map(([name, detail], index) => <div className="arch-item" key={name}><button><strong>{name}</strong><span>{detail}</span><small>{['fetch.v', 'decode.v', 'execute.v', 'memory.v', 'writeback.v'][index]}</small></button>{index < blocks.length - 1 && <i>→</i>}</div>)}</div><div className="architecture-inspector"><b>Selected: Execute</b><span>Related RTL lines: 24–48</span><span>Waveform group: ALU, branch, forward_a, forward_b</span><span className="teal-text">Cycle 142: branch target active</span></div></div></section>;
+}
+
+function Simulation({ onAutoFix, onRun, status }: { onAutoFix: () => void; onRun: () => void; status: string }) {
+  return <section className="feature-view simulation-view"><div className="feature-top"><div><p className="eyebrow">ZERO-SETUP BROWSER SIMULATION</p><h2>Testbench proof, not just generated code.</h2><p>Verilator WASM runs the testbench locally and streams a VCD trace into the waveform renderer.</p></div><button className="run" onClick={onRun}>▶ Run testbench</button></div><div className="simulation-grid"><article className="glass test-card"><span className="check">✓</span><div><b>Reset sequence</b><p>PC initializes to 0x00400000.</p></div><small>PASS</small></article><article className="glass test-card"><span className="check">✓</span><div><b>ALU forwarding</b><p>RAW dependency resolved at cycle 38.</p></div><small>PASS</small></article><article className="glass test-card failing"><span className="check">!</span><div><b>Load-use branch hazard</b><p>Forwarding mismatch at cycle 42.</p></div><small>FAIL</small></article></div><div className="failure-evidence glass"><div><p className="eyebrow">ASSERTION EVIDENCE</p><h3>branch_target_e differed by one clock cycle</h3><p>VCD cursor: 1.42 µs · Module: execute.v · Signal group highlighted in red</p></div><button className="autofix" onClick={onAutoFix}>✦ Auto-Fix with Codex</button></div><p className="sim-status">Simulation status: <b>{status}</b></p></section>;
+}
+
+function ExportPanel() {
+  return <section className="feature-view export-view"><div className="feature-top"><div><p className="eyebrow">FPGA-READY ONE-CLICK EXPORT</p><h2>Take verified RTL onto real hardware.</h2><p>Package generated Verilog, pin constraints, and a reproducible Yosys/NextPNR build script.</p></div></div><div className="export-grid">{[['1', 'Choose board', 'IceStick FPGA'], ['2', 'Generate constraints', 'silicon_canvas.pcf'], ['3', 'Build package', 'Yosys + NextPNR']].map(([number, title, detail]) => <article className="glass export-step" key={number}><span>{number}</span><b>{title}</b><p>{detail}</p></article>)}</div><div className="export-actions glass"><select aria-label="Target FPGA board"><option>IceStick FPGA</option><option>Arty A7</option><option>iCEBreaker</option></select><button className="run">Export hardware package</button></div></section>;
 }
 
 function Waveform() {
