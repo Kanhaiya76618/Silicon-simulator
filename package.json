@@ -1,0 +1,12 @@
+{
+  "name": "silicon-canvas",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["frontend", "backend", "packages/*"],
+  "scripts": {
+    "dev:web": "npm --workspace @silicon-canvas/frontend run dev",
+    "dev:api": "npm --workspace @silicon-canvas/backend run dev",
+    "check": "npm --workspaces --if-present run check"
+  },
+  "engines": { "node": ">=20" }
+}
