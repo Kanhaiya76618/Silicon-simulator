@@ -1,5 +1,5 @@
 {
-  "name": "hardware-design-playground-frontend",
+  "name": "@silicon-canvas/frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -10,6 +10,8 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@silicon-canvas/shared": "file:../packages/shared",
+    "@silicon-canvas/vcd-core": "file:../packages/vcd-core",
     "@monaco-editor/react": "^4.7.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
@@ -33,3 +35,4 @@
     "typescript": "^7.0.2",
     "vite": "^8.1.5"
   }
+}

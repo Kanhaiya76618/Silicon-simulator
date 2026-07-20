@@ -1,8 +1,10 @@
 import Editor from "@monaco-editor/react";
-import { Background, Controls, ReactFlow, type Node } from "@xyflow/react";
+import { Background, Controls, ReactFlow, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Route, Routes } from "react-router-dom";
+import { parseVcd, waveformSegments } from "@silicon-canvas/vcd-core";
+import { createFpgaExport, createProject, createVersion, generateProject } from "./api/client";
 import { CircuitScene } from "./components/CircuitScene";
 import LandingPage from "./components/LandingPage";
 import { RTLGateScene } from "./components/RTLGateScene";
@@ -37,7 +39,42 @@ const flowNodes: Node[] = [
   },
 ];
 
-const files = ['cpu_top.v', 'fetch.v', 'decode.v', 'execute.v', 'memory.v', 'writeback.v', 'hazard_unit.v'];
+const starterFiles = ['cpu_top.v', 'fetch.v', 'decode.v', 'execute.v', 'memory.v', 'writeback.v', 'hazard_unit.v'];
+
+type ArchitectureModule = { name: string; purpose?: string };
+type ArchitectureConnection = { from: string; to: string; signal?: string };
+
+function flowFromArchitecture(graphData: Record<string, unknown>): { nodes: Node[]; edges: Edge[] } {
+  const modules = Array.isArray(graphData.modules)
+    ? graphData.modules.filter((item): item is ArchitectureModule => typeof item === "object" && item !== null && typeof (item as ArchitectureModule).name === "string")
+    : [];
+  if (modules.length === 0) return { nodes: flowNodes, edges: [] };
+  const xGap = 180;
+  const nodes = modules.map((module, index) => ({
+    id: module.name,
+    position: { x: 24 + index * xGap, y: 88 + (index % 2) * 72 },
+    data: { label: module.purpose ? `${module.name}: ${module.purpose}` : module.name },
+    style: {
+      background: "#172033", border: "1px solid #334155", borderRadius: "8px", color: "#cbd5e1",
+      fontSize: "12px", padding: "10px 14px", maxWidth: "160px",
+    },
+  }));
+  const knownModules = new Set(modules.map((module) => module.name));
+  const connections = Array.isArray(graphData.connections)
+    ? graphData.connections.filter((item): item is ArchitectureConnection => typeof item === "object" && item !== null && typeof (item as ArchitectureConnection).from === "string" && typeof (item as ArchitectureConnection).to === "string")
+    : [];
+  return {
+    nodes,
+    edges: connections.filter((connection) => knownModules.has(connection.from) && knownModules.has(connection.to)).map((connection, index) => ({
+      id: `${connection.from}-${connection.to}-${index}`,
+      source: connection.from,
+      target: connection.to,
+      label: connection.signal,
+      style: { stroke: "#38bdf8" },
+      labelStyle: { fill: "#94a3b8", fontSize: 10 },
+    })),
+  };
+}
 
 function Workspace() {
   const prompt = useHardwareStore((state) => state.prompt);
@@ -45,20 +82,67 @@ function Workspace() {
   const verilogCode = useHardwareStore((state) => state.verilogCode);
   const setVerilogCode = useHardwareStore((state) => state.setVerilogCode);
   const isGenerating = useHardwareStore((state) => state.isGenerating);
+  const setIsGenerating = useHardwareStore((state) => state.setIsGenerating);
+  const project = useHardwareStore((state) => state.project);
+  const setProject = useHardwareStore((state) => state.setProject);
+  const generatedFiles = useHardwareStore((state) => state.files);
+  const setFiles = useHardwareStore((state) => state.setFiles);
+  const setGraphData = useHardwareStore((state) => state.setGraphData);
+  const graphData = useHardwareStore((state) => state.graphData);
+  const generationError = useHardwareStore((state) => state.generationError);
+  const setGenerationError = useHardwareStore((state) => state.setGenerationError);
   
   const [status, setStatus] = useState<'Ready' | 'Running' | 'Issue detected'>('Ready');
   const [autoFix, setAutoFix] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(files[0]);
+  const [selectedFile, setSelectedFile] = useState(starterFiles[0]);
   const [activeTab, setActiveTab] = useState<'workspace' | 'architecture' | 'simulate' | 'gates' | 'export'>('workspace');
   const [activeEditorTab, setActiveEditorTab] = useState("design.v");
   const [activeOutputTab, setActiveOutputTab] = useState("Waveforms");
 
   const editorTabs = ["design.v", "testbench.v"];
   const outputTabs = ["Waveforms", "Logs"];
+  const fileNames = generatedFiles.length > 0 ? generatedFiles.map((file) => file.path) : starterFiles;
+  const projectFlow = useMemo(() => flowFromArchitecture(graphData), [graphData]);
 
   function runSimulation() {
     setStatus('Running');
     window.setTimeout(() => setStatus('Issue detected'), 1100);
+  }
+
+  function openFile(fileName: string) {
+    setSelectedFile(fileName);
+    const file = generatedFiles.find((item) => item.path === fileName);
+    if (file) setVerilogCode(file.content);
+  }
+
+  async function handleGenerate() {
+    if (!prompt.trim()) {
+      setGenerationError("Describe the hardware you want to build first.");
+      return;
+    }
+    setIsGenerating(true);
+    setGenerationError(null);
+    try {
+      const activeProject = project
+        ? await createVersion(project.id, prompt)
+        : await createProject(prompt);
+      setProject(activeProject);
+      const generated = await generateProject(activeProject.id);
+      setProject(generated.project);
+      setFiles(generated.files);
+      setGraphData(generated.architecture);
+      const primaryFile = generated.files.find((file) => file.kind === "rtl") ?? generated.files[0];
+      if (primaryFile) {
+        setSelectedFile(primaryFile.path);
+        setVerilogCode(primaryFile.content);
+      }
+      setStatus("Ready");
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "Design generation failed.");
+      setStatus("Issue detected");
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   return (
@@ -104,28 +188,30 @@ function Workspace() {
                   placeholder="e.g. Create an 8-bit synchronous counter with reset"
                   className="h-32 w-full resize-none rounded-md border border-slate-700 bg-[#111827] p-3 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-blue-500/70"
                 />
-                <button
-                  type="button"
-                  disabled={isGenerating}
-                  className="mt-3 w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
-                >
-                  {isGenerating ? "Generating…" : "Generate"}
-                </button>
+                  <button
+                    type="button"
+                    disabled={isGenerating}
+                    onClick={handleGenerate}
+                    className="mt-3 w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
+                  >
+                    {isGenerating ? "Generating…" : "Generate"}
+                  </button>
+                  {generationError && <p role="alert" className="mt-2 text-xs text-rose-400">{generationError}</p>}
               </div>
 
               <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-400">
                 <span>PROJECT FILES</span>
               </div>
               <div className="flex-1 overflow-y-auto rounded-md border border-slate-700/60 bg-[#111827] p-1">
-                {files.map((file) => (
+                {fileNames.map((file) => (
                   <button
                     key={file}
                     type="button"
-                    onClick={() => setSelectedFile(file)}
+                    onClick={() => openFile(file)}
                     className={`flex w-full items-center justify-between rounded px-2.5 py-1.5 text-xs ${selectedFile === file ? 'bg-blue-600/30 text-blue-200 font-medium' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
                   >
                     <span>◈ {file}</span>
-                    <small className="text-[10px] text-slate-500">{file === 'cpu_top.v' ? '4.2 KB' : '2.1 KB'}</small>
+                    <small className="text-[10px] text-slate-500">{generatedFiles.find((item) => item.path === file)?.content.length ?? (file === 'cpu_top.v' ? 4300 : 2100)} B</small>
                   </button>
                 ))}
               </div>
@@ -211,7 +297,7 @@ function Workspace() {
 
               <div className="h-64 border-t border-slate-700/60 p-2">
                 <div className="h-full w-full overflow-hidden rounded-md border border-slate-700/60 bg-[#0b1220]">
-                  <ReactFlow defaultNodes={flowNodes} fitView colorMode="dark" style={{ backgroundColor: "#0b1220" }}>
+                  <ReactFlow nodes={projectFlow.nodes} edges={projectFlow.edges} fitView colorMode="dark" style={{ backgroundColor: "#0b1220" }}>
                     <Background gap={16} size={1} color="#334155" />
                     <Controls />
                   </ReactFlow>
@@ -344,6 +430,36 @@ function Simulation({ onAutoFix, onRun, status }: { onAutoFix: () => void; onRun
 }
 
 function ExportPanel() {
+  const project = useHardwareStore((state) => state.project);
+  const [board, setBoard] = useState("icestick");
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  async function exportPackage() {
+    if (!project?.activeVersionId) {
+      setExportMessage("Generate a design before creating an FPGA package.");
+      return;
+    }
+    setIsExporting(true);
+    setExportMessage(null);
+    try {
+      const exported = await createFpgaExport(project.id, project.activeVersionId, board);
+      for (const artifact of exported.artifacts) {
+        const href = URL.createObjectURL(new Blob([artifact.content], { type: "text/plain" }));
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = artifact.path;
+        link.click();
+        URL.revokeObjectURL(href);
+      }
+      setExportMessage(`Generated ${exported.artifacts.length} files for ${board}. Review pin constraints before programming hardware.`);
+    } catch (error) {
+      setExportMessage(error instanceof Error ? error.message : "FPGA export failed.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   return (
     <section className="feature-view export-view p-6 text-slate-200 w-full overflow-y-auto">
       <div className="feature-top mb-6">
@@ -369,21 +485,41 @@ function ExportPanel() {
         ))}
       </div>
       <div className="export-actions glass bg-slate-900/80 border border-slate-700 p-4 rounded flex items-center gap-4">
-        <select aria-label="Target FPGA board" className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-3 py-2 outline-none">
-          <option>IceStick FPGA</option>
-          <option>Arty A7</option>
-          <option>iCEBreaker</option>
+        <select value={board} onChange={(event) => setBoard(event.target.value)} aria-label="Target FPGA board" className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-3 py-2 outline-none">
+          <option value="icestick">IceStick FPGA</option>
+          <option value="arty_a7">Arty A7</option>
+          <option value="icebreaker">iCEBreaker</option>
         </select>
-        <button type="button" className="run bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-xs font-medium">
-          Export hardware package
+        <button type="button" disabled={isExporting} onClick={exportPackage} className="run bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-xs font-medium disabled:opacity-60">
+          {isExporting ? "Creating package…" : "Export hardware package"}
         </button>
       </div>
+      {exportMessage && <p role="status" className="mt-3 text-xs text-slate-400">{exportMessage}</p>}
     </section>
   );
 }
 
 function Waveform() {
-  const signals = ['clk', 'pc[31:0]', 'instruction[31:0]', 'alu_result[31:0]', 'mem_read', 'branch_taken', 'hazard_stall'];
+  const simulationData = useHardwareStore((state) => state.simulationData);
+  const vcdContent = simulationData.find((item): item is { vcdContent: string } => typeof item === "object" && item !== null && typeof (item as { vcdContent?: unknown }).vcdContent === "string")?.vcdContent;
+  const parsed = useMemo(() => vcdContent ? parseVcd(vcdContent) : null, [vcdContent]);
+  const signals = parsed?.signals.length ? parsed.signals : [
+    { id: 'clk', name: 'clk' }, { id: 'pc', name: 'pc[31:0]' }, { id: 'instruction', name: 'instruction[31:0]' },
+    { id: 'alu_result', name: 'alu_result[31:0]' }, { id: 'mem_read', name: 'mem_read' }, { id: 'branch_taken', name: 'branch_taken' }, { id: 'hazard_stall', name: 'hazard_stall' },
+  ];
+  const tracePath = (signalId: string, index: number) => {
+    const changes = parsed?.changesBySignalId[signalId];
+    if (!parsed || !changes?.length) return index === 0
+      ? 'M0 21H25V5H50V21H75V5H100V21H125V5H150V21H175V5H200V21H225V5H250V21H275V5H300V21H325V5H350V21H375V5H400V21H425V5H450V21H475V5H500V21H525V5H550V21H575V5H600V21H625V5H650V21H700'
+      : index === 6 ? 'M0 21H185V5H235V21H700' : 'M0 21H100V5H275V21H440V5H700';
+    const maxTime = Math.max(parsed.endTime, 1);
+    return waveformSegments(changes, parsed.endTime).map((segment, segmentIndex) => {
+      const start = (segment.from / maxTime) * 700;
+      const end = (segment.to / maxTime) * 700;
+      const y = segment.value === '1' ? 5 : segment.value === '0' ? 21 : 13;
+      return `${segmentIndex === 0 ? `M${start},${y}` : `V${y}H${start}`}H${end}`;
+    }).join('');
+  };
   return (
     <section className="waveform glass h-full rounded-md border border-slate-700/60 bg-[#111827] p-3 flex flex-col">
       <div className="wave-head flex justify-between items-center pb-2 border-b border-slate-800 text-xs text-slate-400">
@@ -403,9 +539,9 @@ function Waveform() {
       <div className="wave-body flex-1 flex overflow-hidden pt-2 font-mono text-xs">
         <div className="signal-list w-36 shrink-0 flex flex-col justify-around text-slate-400 pr-2 border-r border-slate-800">
           {signals.map((signal, i) => (
-            <span key={signal} className="truncate flex items-center gap-1.5">
+            <span key={signal.id} className="truncate flex items-center gap-1.5">
               <i className={`dot h-1.5 w-1.5 rounded-full ${i === 0 ? 'bg-blue-400' : i === 6 ? 'bg-rose-400' : 'bg-emerald-400'}`} />
-              {signal}
+              {signal.name}
             </span>
           ))}
         </div>
@@ -414,9 +550,9 @@ function Waveform() {
             0　　40　　80　　120　　160　　200　　240
           </div>
           {signals.map((signal, i) => (
-            <div className="trace h-6 my-1" key={signal}>
+            <div className="trace h-6 my-1" key={signal.id}>
               <svg viewBox="0 0 700 28" preserveAspectRatio="none" className="h-full w-full stroke-blue-400 fill-none stroke-[1.5]">
-                <path d={i === 0 ? 'M0 21H25V5H50V21H75V5H100V21H125V5H150V21H175V5H200V21H225V5H250V21H275V5H300V21H325V5H350V21H375V5H400V21H425V5H450V21H475V5H500V21H525V5H550V21H575V5H600V21H625V5H650V21H700' : i === 6 ? 'M0 21H185V5H235V21H700' : 'M0 21H100V5H275V21H440V5H700'} />
+                <path d={tracePath(signal.id, i)} />
               </svg>
             </div>
           ))}

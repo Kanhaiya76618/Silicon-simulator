@@ -13,7 +13,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "paths": {
+      "@silicon-canvas/vcd-core": ["../packages/vcd-core/src/index.ts"],
+      "@silicon-canvas/shared/*": ["../packages/shared/src/*"]
+    }
   },
   "include": ["src"]
 }
