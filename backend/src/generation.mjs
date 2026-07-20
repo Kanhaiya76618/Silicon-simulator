@@ -153,6 +153,13 @@ function validateFiles(files) {
     error.code = "AI_INVALID_OUTPUT";
     throw error;
   }
+  const unsupported = files.find((file) => /\binside\s*\{|\bunique(?:0)?\s+(?:case|if)\b|\bpriority\s+(?:case|if)\b|\b(?:rand|randc)\b|\bclass\b/.test(file.content));
+  if (unsupported) {
+    const error = new Error(`Generated ${unsupported.path} uses SystemVerilog features unsupported by the Icarus simulator. Generate again to receive an Icarus-compatible testbench.`);
+    error.statusCode = 502;
+    error.code = "AI_INVALID_OUTPUT";
+    throw error;
+  }
 }
 
 export async function generateHardwareDesign(prompt) {
@@ -167,7 +174,7 @@ export async function generateHardwareDesign(prompt) {
     model: config.rtlModel,
     schemaName: "hardware_rtl_bundle",
     schema: rtlSchema,
-    instructions: "You are the Silicon Canvas RTL engineer. Produce synthesizable Verilog/SystemVerilog and a self-checking testbench from the architecture. Use no Markdown fences. Include a testbench assertion for each verification-plan item. Return only the requested JSON schema.",
+    instructions: "You are the Silicon Canvas RTL engineer. Produce synthesizable Verilog/SystemVerilog and a self-checking testbench from the architecture. The bundle must compile with Icarus Verilog using `iverilog -g2012`. Use a conservative Verilog/SystemVerilog subset: do not use `inside`, `unique`, `priority`, classes, randomization, queues, dynamic arrays, covergroups, constraints, interfaces, packages, DPI, or UVM. In testbenches, express checks with `if (...) begin $display(...); $fatal; end` rather than SystemVerilog assertions or `inside` membership tests. For an N-bit signed add, calculate expected overflow using `(a[N-1] == b[N-1]) && (result[N-1] != a[N-1])`; for subtraction use `(a[N-1] != b[N-1]) && (result[N-1] != a[N-1])`. Do not compare an unbounded integer result to zero to determine finite-width signed overflow. Use no Markdown fences. Include a self-checking test for each verification-plan item. Return only the requested JSON schema.",
     input: `User request:\n${prompt}\n\nArchitecture specification:\n${JSON.stringify(architecture)}`,
   });
   validateFiles(implementation.files);

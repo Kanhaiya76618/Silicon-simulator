@@ -28,8 +28,9 @@ The API currently persists versioned projects and source files in PostgreSQL. It
 | `GET` | `/api/projects/:projectId/versions/:versionId` | Read files for a version |
 | `PUT` | `/api/projects/:projectId/versions/:versionId/files/:path` | Save a source file |
 | `POST` | `/api/projects/:projectId/versions/:versionId/simulations` | Start a browser or remote simulation run |
+| `POST` | `/api/projects/:projectId/versions/:versionId/simulate` | Execute RTL/testbench in the isolated Icarus worker |
 | `POST` | `/api/projects/:projectId/simulations/:runId/complete` | Persist a browser simulator's pass/fail result, logs, and VCD |
-| `POST` | `/api/projects/:projectId/simulations/:runId/auto-fix` | Create an AI patch and a queued rerun from a failed active-version run |
+| `POST` | `/api/projects/:projectId/simulations/:runId/auto-fix` | Create an AI patch and automatically execute its rerun in the isolated worker |
 | `POST` | `/api/projects/:projectId/versions/:versionId/exports` | Create constraints and a reproducible board build script |
 
 ## Repository map

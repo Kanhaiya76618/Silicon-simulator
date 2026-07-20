@@ -24,9 +24,32 @@ services:
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
       AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      SIMULATOR_URL: http://simulator:8090
     depends_on:
       db:
         condition: service_healthy
+      simulator:
+        condition: service_started
+    networks:
+      - default
+      - internal
+
+  simulator:
+    build:
+      context: .
+      dockerfile: backend/simulator-worker/Dockerfile
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - internal
 
   db:
     image: postgres:16-alpine
@@ -41,6 +64,12 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
 
 volumes:
   postgres_data:
+
+networks:
+  internal:
+    internal: true

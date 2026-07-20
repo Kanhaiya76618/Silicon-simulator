@@ -30,6 +30,17 @@ function toProject(row) {
   };
 }
 
+function toStandaloneVersion(row) {
+  return {
+    id: row.id,
+    number: row.version_number,
+    sourcePrompt: row.source_prompt,
+    architecture: row.architecture,
+    generationStatus: row.generation_status,
+    createdAt: row.created_at,
+  };
+}
+
 const selectProject = `
   SELECT p.id AS project_id, p.name, p.prompt, p.status, p.active_version_id,
     p.created_at AS project_created_at, p.updated_at,
@@ -46,6 +57,62 @@ export async function getProject(projectId) {
 export async function listProjects() {
   const { rows } = await pool.query(`${selectProject} ORDER BY p.updated_at DESC LIMIT 100`);
   return rows.map(toProject);
+}
+
+export async function listProjectVersions(projectId) {
+  const { rows } = await pool.query(
+    `SELECT id, version_number, source_prompt, architecture, generation_status, created_at
+     FROM design_versions WHERE project_id = $1 ORDER BY version_number DESC`,
+    [projectId],
+  );
+  return rows.map(toStandaloneVersion);
+}
+
+/** Create a new active version from any previous version without mutating history. */
+export async function restoreProjectVersion(projectId, sourceVersionId) {
+  const client = await pool.connect();
+  const newVersionId = randomUUID();
+  try {
+    await client.query("BEGIN");
+    const { rows: sourceRows } = await client.query(
+      `SELECT source_prompt, architecture, generation_status
+       FROM design_versions WHERE project_id = $1 AND id = $2`,
+      [projectId, sourceVersionId],
+    );
+    const source = sourceRows[0];
+    if (!source) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    const { rows: projectRows } = await client.query(
+      `SELECT COALESCE(MAX(version_number), 0) AS latest_version FROM design_versions WHERE project_id = $1`,
+      [projectId],
+    );
+    const nextNumber = Number(projectRows[0].latest_version) + 1;
+    await client.query(
+      `INSERT INTO design_versions (id, project_id, version_number, source_prompt, architecture, generation_status)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [newVersionId, projectId, nextNumber, source.source_prompt, source.architecture, source.generation_status],
+    );
+    await client.query(
+      `INSERT INTO design_files (id, version_id, path, language, kind, content)
+       SELECT gen_random_uuid(), $1, path, language, kind, content
+       FROM design_files WHERE version_id = $2`,
+      [newVersionId, sourceVersionId],
+    );
+    const projectStatus = source.generation_status === "completed" ? "ready" : "draft";
+    await client.query(
+      "UPDATE projects SET active_version_id = $2, prompt = $3, status = $4, updated_at = NOW() WHERE id = $1",
+      [projectId, newVersionId, source.source_prompt, projectStatus],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  return getProject(projectId);
 }
 
 export async function createProject({ name, prompt }) {

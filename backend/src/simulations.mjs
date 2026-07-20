@@ -80,7 +80,9 @@ export async function completeAutoFixAttempt(attemptId, { status, diagnosis, pat
     `UPDATE auto_fix_attempts SET status = $2, diagnosis = $3, patch = $4,
        result_version_id = $5, completed_at = NOW() WHERE id = $1
      RETURNING id, status, diagnosis, patch, result_version_id, created_at, completed_at`,
-    [attemptId, status, diagnosis, patch, resultVersionId],
+    // `pg` encodes JavaScript arrays as PostgreSQL arrays. This column is JSONB,
+    // so preserve the Auto-Fix file list as JSON explicitly.
+    [attemptId, status, diagnosis, JSON.stringify(patch), resultVersionId],
   );
   const row = rows[0];
   return row && {

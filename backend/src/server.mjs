@@ -5,7 +5,8 @@ import { closeDatabase, pool, runMigrations } from "./db.mjs";
 import { generateHardwareDesign } from "./generation.mjs";
 import { createAutoFix } from "./autofix.mjs";
 import { createExportJob } from "./exports.mjs";
-import { completeGeneration, createProject, createVersion, failGeneration, getProject, listFiles, listProjects, startGeneration, upsertFile } from "./projects.mjs";
+import { runWithSimulator } from "./simulator-client.mjs";
+import { completeGeneration, createProject, createVersion, failGeneration, getProject, listFiles, listProjectVersions, listProjects, restoreProjectVersion, startGeneration, upsertFile } from "./projects.mjs";
 import { completeAutoFixAttempt, completeSimulationRun, createAutoFixAttempt, createSimulationRun, getSimulationContext, getSimulationRun } from "./simulations.mjs";
 
 const maxBodyBytes = 1_000_000;
@@ -126,6 +127,18 @@ async function handleProjectRoutes(request, response, url) {
     else sendJson(response, 201, { project });
     return true;
   }
+  if (resource === "versions" && !versionId && request.method === "GET") {
+    const project = await getProject(projectId);
+    if (!project) sendError(response, 404, "PROJECT_NOT_FOUND", "Project not found.");
+    else sendJson(response, 200, { versions: await listProjectVersions(projectId) });
+    return true;
+  }
+  if (resource === "versions" && versionId && fileMarker === "restore" && filePath.length === 0 && request.method === "POST") {
+    const project = await restoreProjectVersion(projectId, versionId);
+    if (!project) sendError(response, 404, "VERSION_NOT_FOUND", "Project version not found.");
+    else sendJson(response, 201, { project });
+    return true;
+  }
   if (resource === "versions" && versionId && !fileMarker && request.method === "GET") {
     const project = await getProject(projectId);
     if (!project) sendError(response, 404, "PROJECT_NOT_FOUND", "Project not found.");
@@ -138,6 +151,25 @@ async function handleProjectRoutes(request, response, url) {
     const run = await createSimulationRun(projectId, versionId, runner);
     if (!run) sendError(response, 404, "VERSION_NOT_FOUND", "Project version not found.");
     else sendJson(response, 201, { simulation: run });
+    return true;
+  }
+  if (resource === "versions" && versionId && fileMarker === "simulate" && filePath.length === 0 && request.method === "POST") {
+    const run = await createSimulationRun(projectId, versionId, "icarus-container");
+    if (!run) {
+      sendError(response, 404, "VERSION_NOT_FOUND", "Project version not found.");
+      return true;
+    }
+    const files = await listFiles(projectId, versionId);
+    try {
+      const result = await runWithSimulator(files);
+      const simulation = await completeSimulationRun(projectId, run.id, result);
+      sendJson(response, 200, { simulation });
+    } catch (error) {
+      await completeSimulationRun(projectId, run.id, {
+        status: "failed", summary: { phase: "runner", passed: false }, logs: error.message ?? "Simulation worker unavailable.", vcdContent: null,
+      });
+      throw error;
+    }
     return true;
   }
   if (resource === "versions" && versionId && fileMarker === "exports" && filePath.length === 0 && request.method === "POST") {
@@ -208,11 +240,19 @@ async function handleProjectRoutes(request, response, url) {
       for (const file of fix.files) {
         await upsertFile(projectId, nextProject.activeVersionId, file);
       }
-      const rerun = await createSimulationRun(projectId, nextProject.activeVersionId, "browser");
+      const rerun = await createSimulationRun(projectId, nextProject.activeVersionId, "icarus-container");
+      const rerunFiles = await listFiles(projectId, nextProject.activeVersionId);
+      const rerunResult = await runWithSimulator(rerunFiles);
+      const completedRerun = await completeSimulationRun(projectId, rerun.id, rerunResult);
+      if (!completedRerun) throw new Error("The Auto-Fix rerun did not complete.");
+      const repairPassed = completedRerun.status === "passed";
       const completedAttempt = await completeAutoFixAttempt(attempt.id, {
-        status: "applied", diagnosis: fix.diagnosis, patch: fix.files, resultVersionId: nextProject.activeVersionId,
+        status: repairPassed ? "applied" : "failed",
+        diagnosis: repairPassed ? fix.diagnosis : `${fix.diagnosis}\n\nThe repaired version was created, but its verification rerun still failed. Review the latest logs before trying another repair.`,
+        patch: fix.files,
+        resultVersionId: nextProject.activeVersionId,
       });
-      sendJson(response, 200, { project: nextProject, autoFix: completedAttempt, rerun });
+      sendJson(response, 200, { project: nextProject, files: rerunFiles, autoFix: completedAttempt, rerun: completedRerun });
     } catch (error) {
       await completeAutoFixAttempt(attempt.id, { status: "failed", diagnosis: error.message, patch: [], resultVersionId: null });
       throw error;
