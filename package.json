@@ -6,6 +6,7 @@
   "scripts": {
     "dev:web": "npm --workspace @silicon-canvas/frontend run dev",
     "dev:api": "npm --workspace @silicon-canvas/backend run dev",
+    "build": "npm --workspace @silicon-canvas/frontend run build",
     "check": "npm --workspaces --if-present run check"
   },
   "engines": { "node": ">=20" }
