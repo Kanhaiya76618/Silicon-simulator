@@ -10,6 +10,4 @@ export default defineConfig({
       "@silicon-canvas/shared": path.resolve(__dirname, "../packages/shared/src"),
     },
   },
-  server: { port: 3000, strictPort: false },
 });
-
