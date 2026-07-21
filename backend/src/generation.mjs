@@ -55,6 +55,13 @@ const rtlSchema = {
   },
 };
 
+const mentorSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["answer"],
+  properties: { answer: { type: "string" } },
+};
+
 function modelOutputText(response) {
   const text = response.output
     ?.filter((item) => item.type === "message")
@@ -198,4 +205,17 @@ export async function generateHardwareDesign(prompt, { onUsage } = {}) {
   const implementation = implementationResponse.data;
   validateFiles(implementation.files);
   return { architecture, files: implementation.files };
+}
+
+/** Gives a concise, context-bound explanation without sending credentials to the browser. */
+export async function explainHardwareDesign({ prompt, architecture, question }, { onUsage } = {}) {
+  const response = await requestStructuredModel({
+    model: config.architectModel,
+    schemaName: "hardware_mentor_answer",
+    schema: mentorSchema,
+    instructions: "You are Silicon Canvas Mentor. Explain the active hardware design in clear, concise language for a hackathon evaluator. Use only the supplied design context. Do not reveal secrets, invent files or simulation results, or provide destructive instructions. Return only the requested JSON schema.",
+    input: `Design request:\n${prompt}\n\nArchitecture:\n${JSON.stringify(architecture ?? {})}\n\nQuestion:\n${question}`,
+  });
+  await onUsage?.({ operation: "mentor", ...response });
+  return response.data.answer;
 }

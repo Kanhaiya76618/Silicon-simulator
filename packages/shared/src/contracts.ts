@@ -60,7 +60,7 @@ export interface AutoFixAttempt {
   completedAt: string | null;
 }
 
-export type AiUsageOperation = "architecture" | "rtl" | "auto_fix";
+export type AiUsageOperation = "architecture" | "rtl" | "auto_fix" | "mentor";
 
 export interface AiUsageEvent {
   id: string;

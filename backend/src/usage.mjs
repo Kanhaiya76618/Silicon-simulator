@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pool } from "./db.mjs";
 
-const operations = new Set(["architecture", "rtl", "auto_fix"]);
+const operations = new Set(["architecture", "rtl", "auto_fix", "mentor"]);
 
 function toEvent(row) {
   return {

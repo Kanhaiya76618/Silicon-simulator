@@ -1,4 +1,4 @@
-import type { AutoFixAttempt, CreateProjectResponse, DesignFile, DesignVersion, FileKind, Project, SimulationRun } from "@silicon-canvas/shared/contracts";
+import type { AutoFixAttempt, CreateProjectResponse, DesignFile, DesignVersion, FileKind, Project, ProjectAiUsage, SimulationRun } from "@silicon-canvas/shared/contracts";
 
 export interface GeneratedDesignResponse {
   project: Project;
@@ -44,6 +44,15 @@ export async function getVersionFiles(projectId: string, versionId: string): Pro
 export async function listProjectVersions(projectId: string): Promise<DesignVersion[]> {
   const response = await request<{ versions: DesignVersion[] }>(`/api/projects/${projectId}/versions`);
   return response.versions;
+}
+
+export function getProjectAiUsage(projectId: string): Promise<ProjectAiUsage> {
+  return request<ProjectAiUsage>(`/api/projects/${projectId}/usage`);
+}
+
+export async function askMentor(projectId: string, question: string): Promise<string> {
+  const response = await request<{ answer: string }>(`/api/projects/${projectId}/mentor`, { method: "POST", body: JSON.stringify({ question }) });
+  return response.answer;
 }
 
 export async function restoreProjectVersion(projectId: string, versionId: string): Promise<Project> {

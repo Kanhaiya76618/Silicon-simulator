@@ -61,7 +61,9 @@ export async function createExportJob(projectId, versionId, board) {
   const { rows } = await pool.query(
     `INSERT INTO export_jobs (id, version_id, board, status, artifacts, completed_at)
      VALUES ($1, $2, $3, 'completed', $4, NOW()) RETURNING *`,
-    [id, versionId, board, artifacts],
+    // node-postgres treats JavaScript arrays as PostgreSQL arrays. The target
+    // column is JSONB, so serialize the artifact manifest explicitly.
+    [id, versionId, board, JSON.stringify(artifacts)],
   );
   const row = rows[0];
   return { id: row.id, versionId: row.version_id, board: row.board, status: row.status, artifacts: row.artifacts, createdAt: row.created_at, completedAt: row.completed_at };

@@ -1,0 +1,31 @@
+.button-secondary {
+  border: 1px solid #2c6c91;
+  border-radius: 10px;
+  color: #bae8ff;
+  background: #0c2842;
+  font-size: 12px;
+  font-weight: 800;
+  transition: background .2s, border-color .2s;
+}
+
+.button-secondary:hover:not(:disabled) { border-color: #67e8f9; background: #103a5b; }
+.button-secondary:disabled { cursor: not-allowed; opacity: .45; }
+.waveform-empty { display: grid; place-content: center; min-height: 420px; padding: 48px; text-align: center; }
+.waveform-empty h2 { margin-top: 8px; font-size: 19px; }
+.waveform-empty p:last-child { max-width: 450px; color: #8ca4c2; line-height: 1.7; font-size: 13px; }
+.waveform-status { display: inline-flex; margin-left: 8px; border: 1px solid #3a5877; border-radius: 999px; padding: 3px 7px; color: #9bb4cc; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; vertical-align: middle; }
+.waveform-status.passed { border-color: #25756d; color: #77f2d9; background: #0d3738; }
+.waveform-status.failed { border-color: #a85555; color: #fecaca; background: #3a1d25; }
+.waveform-meta { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 0 1px; color: #7790ac; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.waveform-tools button:disabled, .waveform-tools input:disabled { cursor: not-allowed; opacity: .45; }
+.waveform-readout i { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; }
+.waveform-none { display: grid; min-height: 270px; place-content: center; padding: 35px; text-align: center; }
+.waveform-none h3 { margin: 0; color: #d8e7f8; font-size: 15px; }
+.waveform-none p { color: #8ca4c2; font-size: 12px; }
+.simulation-log { margin-top: 15px; border-top: 1px solid #233a56; color: #b6c7df; }
+.simulation-log summary { padding: 12px 0; cursor: pointer; color: #8fd8fa; font-size: 11px; font-weight: 800; }
+.simulation-log pre { max-height: 260px; overflow: auto; margin: 0 0 4px; border: 1px solid #213953; border-radius: 8px; padding: 12px; color: #bbcee1; background: #071525; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.autofix-action { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:14px; padding:13px; border:1px solid #8152ae; border-radius:10px; background:linear-gradient(135deg,#251541,#11243b); }
+.autofix-action b { color:#eee5ff; font-size:12px; }
+.autofix-action p { margin:4px 0 0; color:#b6a8cb; font-size:10px; line-height:1.45; }
+.autofix-action .button-primary { white-space:nowrap; }

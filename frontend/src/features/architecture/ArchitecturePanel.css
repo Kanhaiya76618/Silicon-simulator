@@ -1,0 +1,21 @@
+.architecture-panel { min-height: 560px; border:1px solid #243e5c; border-radius:13px; background:#0a192b; box-shadow:0 14px 38px #02081738; overflow:auto; }
+.architecture-panel > header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:19px; border-bottom:1px solid #233a56; background:linear-gradient(120deg,#0d2844,#0a192b); }
+.architecture-panel h2 { margin:5px 0 7px; color:#eff8ff; font-size:20px; letter-spacing:-.035em; }
+.architecture-panel header p { max-width:700px; margin:0; color:#8ea7c2; font-size:12px; line-height:1.6; }
+.architecture-panel header > span { border:1px solid #286882; border-radius:999px; color:#86e6fa; background:#0e3047; padding:6px 9px; font:10px ui-monospace,monospace; white-space:nowrap; }
+.architecture-graph { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; padding:19px; }
+.architecture-graph article { min-height:200px; position:relative; border:1px solid #2a4f6c; border-radius:11px; background:linear-gradient(150deg,#102b46,#0b1d31); padding:17px; }
+.architecture-graph article > b { color:#62e3ff; font:10px ui-monospace,monospace; }
+.architecture-graph h3 { margin:15px 0 7px; color:#edf8ff; font-size:14px; }
+.architecture-graph p { min-height:34px; margin:0 0 13px; color:#9ab0c8; font-size:11px; line-height:1.5; }
+.architecture-graph article > div { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.architecture-graph small { width:100%; color:#6282a0; font-size:8px; font-weight:800; letter-spacing:.12em; }
+.architecture-graph article span { border-radius:4px; color:#b9d6ea; background:#153852; padding:3px 5px; font:9px ui-monospace,monospace; }
+.architecture-graph .architecture-empty { color:#718aa5; background:transparent; padding:0; }
+.architecture-connections,.architecture-verification { margin:0 19px 19px; border:1px solid #233f5b; border-radius:10px; padding:15px; background:#091a2d; }
+.architecture-connections h3,.architecture-verification h3 { margin:0 0 11px; color:#dceefd; font-size:12px; }
+.architecture-connections ul,.architecture-verification ol { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
+.architecture-connections li { display:flex; align-items:center; flex-wrap:wrap; gap:7px; color:#8ca4c2; font:11px ui-monospace,monospace; }
+.architecture-connections li b { color:#d9f4ff; }.architecture-connections li i { color:#50d8ed; font-style:normal; }.architecture-connections li span { color:#a78bfa; }
+.architecture-verification ol { counter-reset:checks; }.architecture-verification li { counter-increment:checks; color:#a8bdd2; font-size:11px; line-height:1.5; }.architecture-verification li:before { content:counter(checks); display:inline-grid; place-items:center; width:17px; height:17px; margin-right:8px; border:1px solid #2b7188; border-radius:50%; color:#72e2f8; font-size:9px; }
+.architecture-placeholder { display:grid; place-content:center; max-width:none; padding:45px; text-align:center; }.architecture-placeholder h2 { margin-top:8px; }.architecture-placeholder > p:last-child { max-width:450px; color:#8ca4c2; font-size:13px; line-height:1.7; }

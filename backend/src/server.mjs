@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { URL } from "node:url";
 import { config } from "./config.mjs";
 import { closeDatabase, pool, runMigrations } from "./db.mjs";
-import { generateHardwareDesign } from "./generation.mjs";
+import { explainHardwareDesign, generateHardwareDesign } from "./generation.mjs";
 import { createAutoFix } from "./autofix.mjs";
 import { createExportJob } from "./exports.mjs";
 import { runWithSimulator } from "./simulator-client.mjs";
@@ -12,6 +12,7 @@ import { getProjectAiUsage, recordAiUsage } from "./usage.mjs";
 
 const maxBodyBytes = 1_000_000;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const fileKinds = new Set(["rtl", "testbench", "constraints", "script", "readme"]);
 
 function headers() {
   return {
@@ -113,6 +114,24 @@ async function handleProjectRoutes(request, response, url) {
     else sendJson(response, 200, { project });
     return true;
   }
+  if (resource === "mentor" && !versionId && request.method === "POST") {
+    const body = await readJson(request);
+    const question = requireString(body.question, "question", { maxLength: 4_000 });
+    const project = await getProject(projectId);
+    if (!project) {
+      sendError(response, 404, "PROJECT_NOT_FOUND", "Project not found.");
+      return true;
+    }
+    const answer = await explainHardwareDesign({
+      prompt: project.prompt,
+      architecture: project.version?.architecture ?? {},
+      question,
+    }, {
+      onUsage: (event) => recordAiUsage({ projectId, versionId: project.activeVersionId, ...event }),
+    });
+    sendJson(response, 200, { answer });
+    return true;
+  }
   if (resource === "generate" && request.method === "POST") {
     const project = await startGeneration(projectId);
     if (!project?.activeVersionId) {
@@ -209,6 +228,10 @@ async function handleProjectRoutes(request, response, url) {
     const content = requireString(body.content, "content", { maxLength: 500_000, allowEmpty: true });
     const language = body.language === undefined ? "verilog" : requireString(body.language, "language", { maxLength: 40 });
     const kind = body.kind === undefined ? "rtl" : requireString(body.kind, "kind", { maxLength: 40 });
+    if (!fileKinds.has(kind)) {
+      sendError(response, 400, "INVALID_FILE_KIND", "kind must be rtl, testbench, constraints, script, or readme.");
+      return true;
+    }
     const file = await upsertFile(projectId, versionId, { path: filePath.join("/"), content, language, kind });
     if (!file) sendError(response, 404, "VERSION_NOT_FOUND", "Active project version not found.");
     else sendJson(response, 200, { file });
