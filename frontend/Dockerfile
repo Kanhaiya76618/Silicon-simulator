@@ -8,6 +8,7 @@ COPY packages/vcd-core/package.json ./packages/vcd-core/package.json
 RUN npm ci
 COPY frontend ./frontend
 COPY packages/shared ./packages/shared
+COPY packages/vcd-core ./packages/vcd-core
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
