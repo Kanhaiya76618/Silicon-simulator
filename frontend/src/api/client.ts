@@ -1,4 +1,4 @@
-import type { AutoFixAttempt, CreateProjectResponse, DesignFile, DesignVersion, Project, SimulationRun } from "@silicon-canvas/shared/contracts";
+import type { AutoFixAttempt, CreateProjectResponse, DesignFile, DesignVersion, FileKind, Project, SimulationRun } from "@silicon-canvas/shared/contracts";
 
 export interface GeneratedDesignResponse {
   project: Project;
@@ -22,10 +22,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function createProject(prompt: string): Promise<Project> {
-  const response = await request<CreateProjectResponse>("/api/projects", {
-    method: "POST",
-    body: JSON.stringify({ prompt }),
-  });
+  const response = await request<CreateProjectResponse>("/api/projects", { method: "POST", body: JSON.stringify({ prompt }) });
   return response.project;
 }
 
@@ -55,15 +52,20 @@ export async function restoreProjectVersion(projectId: string, versionId: string
 }
 
 export async function createVersion(projectId: string, prompt: string): Promise<Project> {
-  const response = await request<CreateProjectResponse>(`/api/projects/${projectId}/versions`, {
-    method: "POST",
-    body: JSON.stringify({ prompt, copyFiles: false }),
-  });
+  const response = await request<CreateProjectResponse>(`/api/projects/${projectId}/versions`, { method: "POST", body: JSON.stringify({ prompt, copyFiles: false }) });
   return response.project;
 }
 
 export function generateProject(projectId: string): Promise<GeneratedDesignResponse> {
   return request<GeneratedDesignResponse>(`/api/projects/${projectId}/generate`, { method: "POST" });
+}
+
+export async function saveDesignFile(projectId: string, versionId: string, path: string, content: string, kind: FileKind = "rtl"): Promise<DesignFile> {
+  const response = await request<{ file: DesignFile }>(`/api/projects/${projectId}/versions/${versionId}/files/${path.split("/").map(encodeURIComponent).join("/")}`, {
+    method: "PUT",
+    body: JSON.stringify({ content, language: path.endsWith(".json") ? "json" : "verilog", kind }),
+  });
+  return response.file;
 }
 
 export async function runProjectSimulation(projectId: string, versionId: string): Promise<SimulationRun> {
@@ -91,9 +93,6 @@ export interface FpgaExport {
 }
 
 export async function createFpgaExport(projectId: string, versionId: string, board: string): Promise<FpgaExport> {
-  const response = await request<{ export: FpgaExport }>(`/api/projects/${projectId}/versions/${versionId}/exports`, {
-    method: "POST",
-    body: JSON.stringify({ board }),
-  });
+  const response = await request<{ export: FpgaExport }>(`/api/projects/${projectId}/versions/${versionId}/exports`, { method: "POST", body: JSON.stringify({ board }) });
   return response.export;
 }
