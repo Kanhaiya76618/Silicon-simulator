@@ -30,9 +30,6 @@ tmp/
 
 # Local env files
 .env
-.env.*
-!.env.example
-frontend/.env
 
 # Generated simulator artifacts
 artifacts/

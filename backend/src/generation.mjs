@@ -85,7 +85,7 @@ export function resolveResponsesEndpoint() {
   if (azureConfigured) {
     const baseUrl = config.azureOpenaiEndpoint.replace(/\/$/, "").replace(/\/openai\/v1$/, "");
     const deployment = config.azureOpenaiDeploymentName;
-    const url = `${baseUrl}/openai/deployments/${deployment}/chat/completions?api-version=2024-08-01-preview`;
+    const url = `${baseUrl}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`;
     return { url, headers: { "api-key": config.azureOpenaiApiKey }, provider: "azure" };
   }
   if (config.openaiApiKey) {
