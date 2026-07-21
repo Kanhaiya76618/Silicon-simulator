@@ -6,7 +6,16 @@ export interface GeneratedDesignResponse {
   files: DesignFile[];
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080").replace(/\/$/, "");
+function formatApiBaseUrl(rawUrl?: string): string {
+  if (!rawUrl) return "http://localhost:8080";
+  const trimmed = rawUrl.trim().replace(/\/$/, "");
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
+const apiBaseUrl = formatApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
