@@ -29,5 +29,7 @@ export const config = Object.freeze({
   azureOpenaiDeploymentName: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
   architectModel: process.env.AZURE_OPENAI_DEPLOYMENT_NAME ?? process.env.ARCHITECT_MODEL ?? "gpt-5.6",
   rtlModel: process.env.AZURE_OPENAI_DEPLOYMENT_NAME ?? process.env.RTL_MODEL ?? "gpt-5.6",
-  simulatorUrl: process.env.SIMULATOR_URL ?? "http://simulator:8090",
+  simulatorUrl: process.env.SIMULATOR_URL
+    ? (process.env.SIMULATOR_URL.startsWith("http") ? process.env.SIMULATOR_URL : `http://${process.env.SIMULATOR_URL}`)
+    : "http://simulator:8090",
 });
