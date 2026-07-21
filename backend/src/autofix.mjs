@@ -34,7 +34,7 @@ function validateFix(files) {
   }
 }
 
-export async function createAutoFix(context) {
+export async function createAutoFix(context, { onUsage } = {}) {
   const compactContext = {
     simulation: {
       summary: context.run.summary,
@@ -43,13 +43,15 @@ export async function createAutoFix(context) {
     },
     files: context.files.map((file) => ({ ...file, content: file.content.slice(0, 150_000) })),
   };
-  const result = await requestStructuredModel({
+  const response = await requestStructuredModel({
     model: config.rtlModel,
     schemaName: "hardware_autofix",
     schema: fixSchema,
     instructions: "You are the Silicon Canvas RTL debugging engineer. Diagnose the failed self-checking simulation and return complete replacement content only for files that need a change. Preserve all unmodified files. Fix the underlying RTL or testbench bug; do not weaken assertions. The repaired files must compile with Icarus Verilog using `iverilog -g2012`; use conservative Verilog/SystemVerilog only. Never use `inside`, `unique`, `priority`, classes, randomization, queues, dynamic arrays, covergroups, constraints, interfaces, packages, DPI, UVM, or SystemVerilog assertions. Express checks with `if (...) begin $display(...); $fatal; end`. For finite-width signed arithmetic, compute expected overflow from operand/result sign bits: add is `(a[N-1] == b[N-1]) && (result[N-1] != a[N-1])`; subtract is `(a[N-1] != b[N-1]) && (result[N-1] != a[N-1])`. Do not disable or weaken failing checks. Return only the requested JSON schema.",
     input: `Failed simulation context:\n${JSON.stringify(compactContext)}`,
   });
+  await onUsage?.({ operation: "auto_fix", ...response });
+  const result = response.data;
   validateFix(result.files);
   return result;
 }

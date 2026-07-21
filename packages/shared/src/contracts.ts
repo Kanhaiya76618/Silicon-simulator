@@ -59,3 +59,31 @@ export interface AutoFixAttempt {
   createdAt: string;
   completedAt: string | null;
 }
+
+export type AiUsageOperation = "architecture" | "rtl" | "auto_fix";
+
+export interface AiUsageEvent {
+  id: string;
+  projectId: string;
+  versionId: string | null;
+  autoFixAttemptId: string | null;
+  operation: AiUsageOperation;
+  provider: "azure" | "openai";
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  createdAt: string;
+}
+
+export interface ProjectAiUsage {
+  summary: {
+    requestCount: number;
+    usageReportedCount: number;
+    usageMissingCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  events: AiUsageEvent[];
+}

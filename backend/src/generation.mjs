@@ -127,7 +127,12 @@ export async function requestStructuredModel({ model, schemaName, schema, instru
   const text = payload.choices?.[0]?.message?.content;
   if (!text) throw new Error("The generation model returned no usable text.");
   try {
-    return JSON.parse(text);
+    return {
+      data: JSON.parse(text),
+      provider: endpoint.provider,
+      model,
+      usage: normalizeUsage(payload.usage),
+    };
   } catch (cause) {
     const error = new Error("The generation model returned invalid structured data.");
     error.statusCode = 502;
@@ -135,6 +140,15 @@ export async function requestStructuredModel({ model, schemaName, schema, instru
     error.cause = cause;
     throw error;
   }
+}
+
+function normalizeUsage(usage) {
+  const safeTokenCount = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return {
+    inputTokens: safeTokenCount(usage?.prompt_tokens),
+    outputTokens: safeTokenCount(usage?.completion_tokens),
+    totalTokens: safeTokenCount(usage?.total_tokens),
+  };
 }
 
 function validateFiles(files) {
@@ -162,21 +176,26 @@ function validateFiles(files) {
   }
 }
 
-export async function generateHardwareDesign(prompt) {
-  const architecture = await requestStructuredModel({
+export async function generateHardwareDesign(prompt, { onUsage } = {}) {
+  const architectureResponse = await requestStructuredModel({
     model: config.architectModel,
     schemaName: "hardware_architecture",
     schema: architectureSchema,
     instructions: "You are the Silicon Canvas hardware architect. Produce a concise, synthesizable-SystemVerilog-ready microarchitecture. Do not include implementation code; return only the requested JSON schema.",
     input: `Design request:\n${prompt}`,
   });
-  const implementation = await requestStructuredModel({
+  await onUsage?.({ operation: "architecture", ...architectureResponse });
+  const architecture = architectureResponse.data;
+
+  const implementationResponse = await requestStructuredModel({
     model: config.rtlModel,
     schemaName: "hardware_rtl_bundle",
     schema: rtlSchema,
     instructions: "You are the Silicon Canvas RTL engineer. Produce synthesizable Verilog/SystemVerilog and a self-checking testbench from the architecture. The bundle must compile with Icarus Verilog using `iverilog -g2012`. Use a conservative Verilog/SystemVerilog subset: do not use `inside`, `unique`, `priority`, classes, randomization, queues, dynamic arrays, covergroups, constraints, interfaces, packages, DPI, or UVM. In testbenches, express checks with `if (...) begin $display(...); $fatal; end` rather than SystemVerilog assertions or `inside` membership tests. For an N-bit signed add, calculate expected overflow using `(a[N-1] == b[N-1]) && (result[N-1] != a[N-1])`; for subtraction use `(a[N-1] != b[N-1]) && (result[N-1] != a[N-1])`. Do not compare an unbounded integer result to zero to determine finite-width signed overflow. Use no Markdown fences. Include a self-checking test for each verification-plan item. Return only the requested JSON schema.",
     input: `User request:\n${prompt}\n\nArchitecture specification:\n${JSON.stringify(architecture)}`,
   });
+  await onUsage?.({ operation: "rtl", ...implementationResponse });
+  const implementation = implementationResponse.data;
   validateFiles(implementation.files);
   return { architecture, files: implementation.files };
 }

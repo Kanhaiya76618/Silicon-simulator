@@ -8,8 +8,10 @@ import { createExportJob } from "./exports.mjs";
 import { runWithSimulator } from "./simulator-client.mjs";
 import { completeGeneration, createProject, createVersion, failGeneration, getProject, listFiles, listProjectVersions, listProjects, restoreProjectVersion, startGeneration, upsertFile } from "./projects.mjs";
 import { completeAutoFixAttempt, completeSimulationRun, createAutoFixAttempt, createSimulationRun, getSimulationContext, getSimulationRun } from "./simulations.mjs";
+import { getProjectAiUsage, recordAiUsage } from "./usage.mjs";
 
 const maxBodyBytes = 1_000_000;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function headers() {
   return {
@@ -70,6 +72,10 @@ function optionalString(value, field, maxLength) {
   return requireString(value, field, { maxLength, allowEmpty: true });
 }
 
+function isUuid(value) {
+  return typeof value === "string" && uuidPattern.test(value);
+}
+
 function projectPath(pathname) {
   const segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
   return segments[0] === "api" && segments[1] === "projects" ? segments.slice(2) : null;
@@ -93,6 +99,14 @@ async function handleProjectRoutes(request, response, url) {
 
   const [projectId, resource, versionId, fileMarker, ...filePath] = segments;
   if (!projectId) return false;
+  if (!isUuid(projectId)) {
+    sendError(response, 400, "INVALID_ID", "projectId must be a UUID.");
+    return true;
+  }
+  if ((resource === "versions" || resource === "simulations") && versionId && !isUuid(versionId)) {
+    sendError(response, 400, "INVALID_ID", "versionId or simulationId must be a UUID.");
+    return true;
+  }
   if (!resource && request.method === "GET") {
     const project = await getProject(projectId);
     if (!project) sendError(response, 404, "PROJECT_NOT_FOUND", "Project not found.");
@@ -106,7 +120,9 @@ async function handleProjectRoutes(request, response, url) {
       return true;
     }
     try {
-      const generated = await generateHardwareDesign(project.prompt);
+      const generated = await generateHardwareDesign(project.prompt, {
+        onUsage: (event) => recordAiUsage({ projectId, versionId: project.activeVersionId, ...event }),
+      });
       const completed = await completeGeneration(projectId, project.activeVersionId, generated.architecture, generated.files);
       sendJson(response, 200, { project: completed, architecture: generated.architecture, files: generated.files });
     } catch (error) {
@@ -131,6 +147,12 @@ async function handleProjectRoutes(request, response, url) {
     const project = await getProject(projectId);
     if (!project) sendError(response, 404, "PROJECT_NOT_FOUND", "Project not found.");
     else sendJson(response, 200, { versions: await listProjectVersions(projectId) });
+    return true;
+  }
+  if (resource === "usage" && !versionId && request.method === "GET") {
+    const project = await getProject(projectId);
+    if (!project) sendError(response, 404, "PROJECT_NOT_FOUND", "Project not found.");
+    else sendJson(response, 200, await getProjectAiUsage(projectId));
     return true;
   }
   if (resource === "versions" && versionId && fileMarker === "restore" && filePath.length === 0 && request.method === "POST") {
@@ -235,7 +257,14 @@ async function handleProjectRoutes(request, response, url) {
       return true;
     }
     try {
-      const fix = await createAutoFix(context);
+      const fix = await createAutoFix(context, {
+        onUsage: (event) => recordAiUsage({
+          projectId,
+          versionId: context.run.versionId,
+          autoFixAttemptId: attempt.id,
+          ...event,
+        }),
+      });
       const nextProject = await createVersion(projectId, { prompt: project.prompt, copyFiles: true });
       for (const file of fix.files) {
         await upsertFile(projectId, nextProject.activeVersionId, file);

@@ -88,6 +88,7 @@ All API responses are JSON. Errors use this shape:
 | `GET` | `/api/projects` | Lists projects. |
 | `POST` | `/api/projects` | Creates a project from `{ "prompt", "name"? }`. |
 | `GET` | `/api/projects/:projectId` | Returns active project/version metadata. |
+| `GET` | `/api/projects/:projectId/usage` | Returns recorded AI token usage and a project-level total. |
 | `POST` | `/api/projects/:projectId/generate` | Generates architecture, RTL and testbench for the active version. |
 | `POST` | `/api/projects/:projectId/versions` | Creates a version; accepts `{ "prompt"?, "copyFiles"? }`. |
 | `GET` | `/api/projects/:projectId/versions` | Lists all project versions. |
@@ -103,7 +104,7 @@ All API responses are JSON. Errors use this shape:
 
 ## Data model
 
-The initial migration is `backend/migrations/001_initial_schema.sql`.
+Database migrations are kept in `backend/migrations/` and applied once in filename order. The API records each applied migration in `schema_migrations`.
 
 | Table | Why it exists |
 | --- | --- |
@@ -113,6 +114,7 @@ The initial migration is `backend/migrations/001_initial_schema.sql`.
 | `simulation_runs` | Runner, status, summary, logs, VCD and timestamps. |
 | `auto_fix_attempts` | Repair status, diagnosis, JSON patch and resulting version. |
 | `export_jobs` | FPGA target board, output artifacts and completion state. |
+| `ai_usage_events` | AI operation, provider/deployment, provider-reported token counts and project/version/repair relation. |
 
 ## AI provider configuration
 
@@ -141,7 +143,15 @@ npm run check
 
 ## Token usage: current answer
 
-**There is no exact historical token total available in the current implementation.** The AI provider usually returns token-usage metadata, but `requestStructuredModel` currently reads only the model message content and does not persist `usage` to PostgreSQL or logs. Therefore, neither an accurate number nor a cost estimate can be reconstructed after the fact.
+Provider-reported token usage is now saved for every completed architecture, RTL and Auto-Fix model request. Read a project total and individual request events through:
+
+```text
+GET /api/projects/:projectId/usage
+```
+
+The summary includes request count, reported/missing usage counts, and input, output and total tokens. Individual events identify the operation, provider, deployment/model and related version or Auto-Fix attempt. Prompt contents and credentials are not retained in the usage event.
+
+Usage from requests made **before migration `002_ai_usage_events.sql` is applied cannot be reconstructed**. Also, if a provider response does not contain a `usage` object, the event is still stored but reported as missing rather than inventing a token total.
 
 What can be stated exactly:
 
@@ -153,9 +163,7 @@ What can be stated exactly:
 
 The input is intentionally bounded before an Auto-Fix call: logs/VCD are each limited to the last 20,000 characters and each source file is limited to 150,000 characters. This limits accidental oversized requests, but character limits are not a token count.
 
-### Required change for exact token reporting
-
-Add an `ai_usage_events` table with: operation (`architecture`, `rtl`, `auto_fix`), provider, deployment/model, `prompt_tokens`, `completion_tokens`, `total_tokens`, optional cost, project/version/repair IDs and timestamp. Then, in `requestStructuredModel`, record the provider response’s `usage` object for every successful request. A dashboard query can then show total tokens and cost per project, version and date range without storing API keys or duplicate prompt content.
+Cost is intentionally not calculated yet: Azure/OpenAI pricing depends on the exact deployment, region and billing agreement. A future pricing table can calculate an estimate from these recorded provider token counts without changing the request audit trail.
 
 ## Improvements completed so far
 
@@ -169,6 +177,8 @@ Add an `ai_usage_events` table with: operation (`architecture`, `rtl`, `auto_fix
 - Auto-Fix persists JSON patches correctly and records the result version.
 - Version restore clones files into a new version, preserving earlier work rather than overwriting it.
 - Failure paths update generation, simulation and repair records with useful status and logs.
+- AI usage is now auditable per project/version/repair, including provider-reported token totals.
+- Migration execution now records completed migrations and uses a database advisory lock to prevent concurrent API startup races.
 
 ### Simulation safety
 
