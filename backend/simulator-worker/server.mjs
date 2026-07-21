@@ -10,6 +10,12 @@ const maxFileBytes = 500_000;
 const timeoutMs = 15_000;
 const blockedSystemTasks = /\$(?:system|fopen|fread|fwrite|readmem[bh]|dumplimit)\b/i;
 
+function inputError(message, code = "SIMULATION_INPUT_REJECTED") {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(body));
@@ -27,16 +33,16 @@ async function readJson(request) {
 }
 
 function validateFiles(files) {
-  if (!Array.isArray(files) || files.length === 0 || files.length > 30) throw new Error("Simulation requires one to 30 Verilog files.");
+  if (!Array.isArray(files) || files.length === 0 || files.length > 30) throw inputError("Simulation requires one to 30 Verilog files.");
   for (const file of files) {
     if (typeof file?.path !== "string" || !/^[A-Za-z0-9_./-]+\.(?:v|sv)$/.test(file.path) || file.path.includes("..")) {
-      throw new Error("Simulation contains an invalid file path.");
+      throw inputError("Simulation contains an invalid file path.");
     }
     if (typeof file.content !== "string" || Buffer.byteLength(file.content) > maxFileBytes) {
-      throw new Error("Simulation contains an invalid source file.");
+      throw inputError("Simulation contains an invalid source file.");
     }
     if (blockedSystemTasks.test(file.content)) {
-      throw new Error(`Unsafe system task blocked in ${file.path}.`);
+      throw inputError(`Unsafe system task blocked in ${file.path}.`, "UNSAFE_SYSTEM_TASK");
     }
   }
 }
@@ -95,6 +101,6 @@ createServer(async (request, response) => {
     const body = await readJson(request);
     sendJson(response, 200, await runSimulation(body.files));
   } catch (error) {
-    sendJson(response, 400, { error: error.message || "Simulation failed." });
+    sendJson(response, 400, { error: error.message || "Simulation failed.", code: error.code ?? "SIMULATION_INPUT_REJECTED" });
   }
 }).listen(port, () => console.log(`Silicon Canvas simulator worker: http://localhost:${port}`));

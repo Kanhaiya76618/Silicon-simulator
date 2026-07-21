@@ -50,7 +50,13 @@ export function compileSchematic(graph: CircuitGraph): CompileResult {
   for (const node of internal) lines.push(`  wire ${bus(node.width)}${net(node.id)};`);
   if (internal.length) lines.push("");
 
-  const signal = (edge?: CircuitEdge) => edge ? (byId.get(edge.source)?.type === "output" ? net(edge.source) : sanitize(byId.get(edge.source)?.label ?? edge.source)) : "1'b0";
+  const signal = (edge?: CircuitEdge) => {
+    if (!edge) return "1'b0";
+    const source = byId.get(edge.source);
+    if (!source) return "1'b0";
+    // Pins are module ports; every component output uses its generated internal net.
+    return ["input", "clock", "reset"].includes(source.type) ? sanitize(source.label) : net(source.id);
+  };
   for (const node of internal) {
     const begin = lines.length + 1;
     const args = incoming.get(node.id) ?? [];
