@@ -2,7 +2,7 @@ import Editor from "@monaco-editor/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { autoFixSimulation, createFpgaExport, createProject, createVersion, generateProject, getProject, getProjectAiUsage, getVersionFiles, listProjectVersions, restoreProjectVersion, runProjectSimulation, saveDesignFile, type FpgaExport } from "../../api/client";
-import type { DesignVersion, ProjectAiUsage } from "@silicon-canvas/shared/contracts";
+import type { DesignVersion, Project, ProjectAiUsage } from "@silicon-canvas/shared/contracts";
 import { useHardwareStore } from "../../store/hardwareStore";
 import { AgentMissionControl } from "../agents/AgentMissionControl";
 import { ArchitecturePanel } from "../architecture/ArchitecturePanel";
@@ -64,6 +64,12 @@ export function Workspace() {
   const editedSinceSave = useRef(false);
 
   const sourceName = useMemo(() => files.find((file) => file.kind === "rtl")?.path ?? "schematic_top.v", [files]);
+
+  const adoptMentorProject = useCallback((nextProject: Project) => {
+    setProject(nextProject);
+    window.localStorage.setItem(activeProjectStorageKey, nextProject.id);
+    setToast("Project context created for the Mentor.");
+  }, [setProject]);
 
   const refreshProjectDetails = useCallback(async () => {
     if (!project) {
@@ -288,13 +294,13 @@ export function Workspace() {
     <section className="workspace-prompt"><label htmlFor="hardware-prompt">Describe your hardware</label><textarea id="hardware-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Try: a 4-bit ALU with overflow detection" /><button onClick={generate} disabled={isGenerating}>{isGenerating ? "Generating…" : "Generate design"}</button></section>
     {toast && <motion.div initial={{ y: -8, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="toast" role="status">✓ {toast}<button type="button" aria-label="Dismiss notification" onClick={() => setToast("")}>×</button></motion.div>}
     <AnimatePresence mode="wait"><motion.div key={activeTab} initial={{ opacity: 0, y: 9 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="workspace-content">
-      {activeTab === "studio" && <section className="studio-grid"><div className="editor-shell"><div className="panel-heading"><div><p className="section-kicker">RTL SOURCE</p><h2>{sourceName}</h2></div><span>Verilog-2001</span></div><Editor height="100%" language="verilog" theme="vs-dark" value={verilogCode} onChange={(value) => { editedSinceSave.current = true; setVerilogCode(value ?? ""); }} options={{ fontSize: 13, minimap: { enabled: false }, padding: { top: 16 }, automaticLayout: true }} /></div><AgentMissionControl prompt={prompt} projectId={project?.id} /></section>}
+      {activeTab === "studio" && <section className="studio-grid"><div className="editor-shell"><div className="panel-heading"><div><p className="section-kicker">RTL SOURCE</p><h2>{sourceName}</h2></div><span>Verilog-2001</span></div><Editor height="100%" language="verilog" theme="vs-dark" value={verilogCode} onChange={(value) => { editedSinceSave.current = true; setVerilogCode(value ?? ""); }} options={{ fontSize: 13, minimap: { enabled: false }, padding: { top: 16 }, automaticLayout: true }} /></div><AgentMissionControl prompt={prompt} projectId={project?.id} onProjectCreated={adoptMentorProject} /></section>}
       {activeTab === "designer" && <CircuitDesigner onGenerated={persistSchematic} />}
       {activeTab === "architecture" && <ArchitecturePanel architecture={graphData} />}
       {activeTab === "gates" && <RtlGatesPanel architecture={graphData} />}
       {activeTab === "waveforms" && <WaveformPanel simulation={simulationData[0]} onAutoFix={repairSimulation} isAutoFixing={isGenerating} />}
       {activeTab === "project" && <ProjectPanel project={project} versions={versions} usage={usage} exportResult={exportResult} busy={isGenerating} onRestore={restoreVersion} onExport={exportFpga} />}
-      {activeTab === "copilot" && <AgentMissionControl prompt={prompt} projectId={project?.id} />}
+      {activeTab === "copilot" && <AgentMissionControl prompt={prompt} projectId={project?.id} onProjectCreated={adoptMentorProject} />}
     </motion.div></AnimatePresence>
   </main>;
 }

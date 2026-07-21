@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { askMentor } from "../../api/client";
+import type { Project } from "@silicon-canvas/shared/contracts";
+import { askMentor, createProject } from "../../api/client";
 
 const agents = [
   { name: "Architect", initials: "AR", detail: "Plans modules, ports, and the block diagram.", output: "Architecture specification", color: "blue" },
@@ -10,7 +11,7 @@ const agents = [
   { name: "Mentor", initials: "ME", detail: "Explains modules, signals, and design decisions in plain language.", output: "Guided explanation", color: "teal" },
 ];
 
-export function AgentMissionControl({ prompt, projectId }: { prompt: string; projectId?: string }) {
+export function AgentMissionControl({ prompt, projectId, onProjectCreated }: { prompt: string; projectId?: string; onProjectCreated?: (project: Project) => void }) {
   const [open, setOpen] = useState<string | null>("Architect");
   const [message, setMessage] = useState("");
   const [isAsking, setIsAsking] = useState(false);
@@ -23,13 +24,11 @@ export function AgentMissionControl({ prompt, projectId }: { prompt: string; pro
     if (!question || isAsking) return;
     setMessages((current) => [...current, { role: "user", text: question }]);
     setMessage("");
-    if (!projectId) {
-      setMessages((current) => [...current, { role: "agent", text: "Generate a project first, then I can explain its real architecture and RTL context." }]);
-      return;
-    }
     setIsAsking(true);
     try {
-      const answer = await askMentor(projectId, question);
+      const contextProject = projectId ? undefined : await createProject(prompt.trim() || "Hardware design discussion");
+      if (contextProject) onProjectCreated?.(contextProject);
+      const answer = await askMentor(contextProject?.id ?? projectId!, question);
       setMessages((current) => [...current, { role: "agent", text: answer }]);
     } catch (error) {
       setMessages((current) => [...current, { role: "agent", text: `I could not reach the server-side Mentor: ${error instanceof Error ? error.message : "Unknown error."}` }]);
@@ -39,9 +38,9 @@ export function AgentMissionControl({ prompt, projectId }: { prompt: string; pro
   };
 
   return <section className="mission-control">
-    <div className="mission-heading"><div><p className="section-kicker">AGENT MISSION CONTROL</p><h2>One design, five specialists.</h2></div><span className="agent-status"><i /> {projectId ? "Project context ready" : "Generate a project"}</span></div>
+    <div className="mission-heading"><div><p className="section-kicker">AGENT MISSION CONTROL</p><h2>One design, five specialists.</h2></div><span className="agent-status"><i /> {projectId ? "Project context ready" : "Ready to start"}</span></div>
     <div className="agent-roster">{agents.map((agent, index) => <motion.button layout key={agent.name} className={`agent-card ${open === agent.name ? "agent-card-open" : ""}`} onClick={() => setOpen(open === agent.name ? null : agent.name)} whileHover={{ y: -3 }} whileTap={{ scale: .98}}><span className={`agent-avatar ${agent.color}`}>{agent.initials}</span><span><strong>{agent.name}</strong><small>{index < 3 ? "Ready" : "Standby"}</small></span><b>⌄</b>{open === agent.name && <span className="agent-card-detail">{agent.detail}<span className="agent-card-output">Produces: {agent.output}</span></span>}</motion.button>)}</div>
     <div className="agent-timeline">{["Prompt received", "Architect maps blocks", "RTL Engineer prepares source", "Verifier waits for run"].map((step, index) => <div key={step} className={index === 1 ? "timeline-active" : ""}><i>{index + 1}</i><span>{step}</span></div>)}</div>
-    <div className="mentor-chat"><div><b>Mentor / Explainer</b><span>{projectId ? "Server-side AI" : "Project required"}</span></div><div className="chat-log">{messages.map((item, index) => <p key={index} className={item.role}>{item.text}</p>)}</div><form onSubmit={(event) => { event.preventDefault(); void ask(); }}><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder={prompt ? `Ask about “${prompt.slice(0, 36)}…”` : "Explain this module"} disabled={isAsking} /><button className="button-primary" disabled={isAsking}>{isAsking ? "Thinking…" : "Ask"}</button></form></div>
+    <div className="mentor-chat"><div><b>Mentor / Explainer</b><span>{projectId ? "Server-side AI" : "Creates project context"}</span></div><div className="chat-log">{messages.map((item, index) => <p key={index} className={item.role}>{item.text}</p>)}</div><form onSubmit={(event) => { event.preventDefault(); void ask(); }}><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder={prompt ? `Ask about “${prompt.slice(0, 36)}…”` : "Explain this module"} disabled={isAsking} /><button className="button-primary" disabled={isAsking}>{isAsking ? "Thinking…" : "Ask"}</button></form></div>
   </section>;
 }
